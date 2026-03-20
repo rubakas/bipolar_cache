@@ -27,6 +27,54 @@ class FakeModel
   bipolar_count_cache :comments
 end
 
+class AlwaysCacheModel
+  include BipolarCache::Sequel::PluginAlpha
+
+  attr_accessor :items_count_cache
+
+  def initialize(count_cache: nil)
+    @items_count_cache = count_cache
+  end
+
+  def items_dataset
+    self
+  end
+
+  def count
+    99
+  end
+
+  def update(attrs)
+    attrs.each { |k, v| send("#{k}=", v) }
+  end
+
+  bipolar_count_cache :items, chance: 1
+end
+
+class NeverCacheModel
+  include BipolarCache::Sequel::PluginAlpha
+
+  attr_accessor :items_count_cache
+
+  def initialize(count_cache: nil)
+    @items_count_cache = count_cache
+  end
+
+  def items_dataset
+    self
+  end
+
+  def count
+    99
+  end
+
+  def update(attrs)
+    attrs.each { |k, v| send("#{k}=", v) }
+  end
+
+  bipolar_count_cache :items, chance: 0
+end
+
 class TestSequelPluginAlpha < Minitest::Test
   def test_defines_count_method
     model = FakeModel.new(count_cache: 10)
@@ -168,5 +216,65 @@ class TestSequelPluginAlpha < Minitest::Test
     procs1 = model.send(:fetch_or_build_procs, name: :comments)
     procs2 = model.send(:fetch_or_build_procs, name: :comments)
     assert_same procs1, procs2
+  end
+
+  # Integration tests: full read path through BipolarCache.read!
+
+  def test_count_returns_cached_value_when_chance_is_one
+    model = AlwaysCacheModel.new(count_cache: 10)
+    assert_equal 10, model.items_count
+  end
+
+  def test_count_returns_actual_and_updates_when_chance_is_zero
+    model = NeverCacheModel.new(count_cache: 10)
+    result = model.items_count
+    assert_equal 99, result
+    assert_equal 99, model.items_count_cache
+  end
+
+  def test_count_does_not_update_when_actual_equals_cached_and_chance_is_zero
+    model = NeverCacheModel.new(count_cache: 99)
+    result = model.items_count
+    assert_equal 99, result
+    assert_equal 99, model.items_count_cache
+  end
+
+  # Rescue wrapping on increment/decrement
+
+  def test_increment_uses_rescue_on_error
+    model = FakeModel.new(count_cache: 10)
+    # Build procs, then sabotage the update proc to raise
+    procs = model.send(:fetch_or_build_procs, name: :comments)
+    procs[:update] = ->(_v) { raise "db error" }
+    assert_output(nil, /BipolarCache.*db error/) do
+      result = model.comments_count_increment!
+      assert_equal 0, result
+    end
+  end
+
+  def test_decrement_uses_rescue_on_error
+    model = FakeModel.new(count_cache: 10)
+    procs = model.send(:fetch_or_build_procs, name: :comments)
+    procs[:update] = ->(_v) { raise "db error" }
+    assert_output(nil, /BipolarCache.*db error/) do
+      result = model.comments_count_decrement!
+      assert_equal 0, result
+    end
+  end
+
+  # Negative chance validation
+
+  def test_negative_chance_raises_argument_error
+    model = FakeModel.new(count_cache: 10)
+    assert_raises(ArgumentError) do
+      model.send(:bcsp_proc_chance_from, chance: -1)
+    end
+  end
+
+  def test_negative_float_chance_raises_argument_error
+    model = FakeModel.new(count_cache: 10)
+    assert_raises(ArgumentError) do
+      model.send(:bcsp_proc_chance_from, chance: -0.5)
+    end
   end
 end

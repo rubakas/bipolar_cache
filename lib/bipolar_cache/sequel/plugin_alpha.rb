@@ -1,5 +1,7 @@
 # frozen_string_literal: true
 
+require_relative "../../bipolar_cache"
+
 module BipolarCache
   module Sequel
     module PluginAlpha
@@ -21,14 +23,20 @@ module BipolarCache
 
           define_method "#{method_name}_increment!" do |by: 1|
             procs = fetch_or_build_procs(**opts)
-
             procs[:update].call(by + (procs[:cached].call || 0))
+          rescue StandardError => e
+            raise unless procs[:rescue].is_a?(Proc)
+
+            procs[:rescue].call(e)
           end
 
           define_method "#{method_name}_decrement!" do |by: 1|
             procs = fetch_or_build_procs(**opts)
-
             procs[:update].call((-by) + (procs[:cached].call || 0))
+          rescue StandardError => e
+            raise unless procs[:rescue].is_a?(Proc)
+
+            procs[:rescue].call(e)
           end
         end
       end
@@ -105,6 +113,8 @@ module BipolarCache
         when Proc
           opts[:chance]
         when Integer, Float
+          raise ArgumentError, "chance must be >= 0, got #{opts[:chance]}" if opts[:chance].negative?
+
           normalised_chance = if opts[:chance] > 1
                                 opts[:chance] / 100.0
                               else
