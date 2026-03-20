@@ -90,4 +90,29 @@ class TestBipolarCache < Minitest::Test
     @bipolar_cache.read!(**procs)
     refute update_called
   end
+
+  def test_if_proc_exception_routes_through_rescue
+    error_caught = nil
+    procs = @example_procs.merge(
+      if: -> { raise "if failed" },
+      rescue: lambda { |e|
+        error_caught = e
+        -1
+      }
+    )
+    result = @bipolar_cache.read!(**procs)
+    assert_equal(-1, result)
+    assert_equal "if failed", error_caught.message
+  end
+
+  def test_if_proc_exception_raises_without_rescue
+    procs = {
+      actual: -> { @value },
+      cached: -> { @cache },
+      chance: ->(_v) { 1 },
+      if: -> { raise "if failed" },
+      update: ->(_v) {}
+    }
+    assert_raises(RuntimeError) { @bipolar_cache.read!(**procs) }
+  end
 end

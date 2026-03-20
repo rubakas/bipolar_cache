@@ -23,7 +23,9 @@ module BipolarCache
 
           define_method "#{method_name}_increment!" do |by: 1|
             procs = fetch_or_build_procs(**opts)
-            procs[:update].call(by + (procs[:cached].call || 0))
+            new_value = by + (procs[:cached].call || 0)
+            procs[:update].call(new_value)
+            new_value
           rescue StandardError => e
             raise unless procs[:rescue].is_a?(Proc)
 
@@ -32,7 +34,9 @@ module BipolarCache
 
           define_method "#{method_name}_decrement!" do |by: 1|
             procs = fetch_or_build_procs(**opts)
-            procs[:update].call((-by) + (procs[:cached].call || 0))
+            new_value = (-by) + (procs[:cached].call || 0)
+            procs[:update].call(new_value)
+            new_value
           rescue StandardError => e
             raise unless procs[:rescue].is_a?(Proc)
 

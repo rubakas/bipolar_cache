@@ -277,4 +277,30 @@ class TestSequelPluginAlpha < Minitest::Test
       model.send(:bcsp_proc_chance_from, chance: -0.5)
     end
   end
+
+  # Return value tests for increment/decrement
+
+  def test_increment_returns_new_value
+    model = FakeModel.new(count_cache: 10)
+    result = model.comments_count_increment!
+    assert_equal 11, result
+  end
+
+  def test_increment_by_amount_returns_new_value
+    model = FakeModel.new(count_cache: 10)
+    result = model.comments_count_increment!(by: 5)
+    assert_equal 15, result
+  end
+
+  def test_decrement_returns_new_value
+    model = FakeModel.new(count_cache: 10)
+    result = model.comments_count_decrement!
+    assert_equal 9, result
+  end
+
+  def test_decrement_by_amount_returns_new_value
+    model = FakeModel.new(count_cache: 10)
+    result = model.comments_count_decrement!(by: 3)
+    assert_equal 7, result
+  end
 end
