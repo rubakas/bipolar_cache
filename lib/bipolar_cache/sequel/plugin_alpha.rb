@@ -22,13 +22,13 @@ module BipolarCache
           define_method "#{method_name}_increment!" do |by: 1|
             procs = fetch_or_build_procs(**opts)
 
-            procs[:update].call(by + procs[:cached].call)
+            procs[:update].call(by + (procs[:cached].call || 0))
           end
 
           define_method "#{method_name}_decrement!" do |by: 1|
             procs = fetch_or_build_procs(**opts)
 
-            procs[:update].call((-by) + procs[:cached].call)
+            procs[:update].call((-by) + (procs[:cached].call || 0))
           end
         end
       end
@@ -94,7 +94,7 @@ module BipolarCache
         when Proc
           opts[:update]
         when String, Symbol
-          -> { send(opts[:update]) }
+          ->(value) { send(opts[:update], value) }
         else
           ->(value) { update({ cache_name => value }) }
         end
@@ -106,13 +106,13 @@ module BipolarCache
           opts[:chance]
         when Integer, Float
           normalised_chance = if opts[:chance] > 1
-                                opts[:chance] / 100
+                                opts[:chance] / 100.0
                               else
                                 opts[:chance]
                               end
           ->(_value) { normalised_chance }
         else # default
-          ->(value) { value < 10 ? 0.1 : 0.9 }
+          ->(value) { (value || 0) < 10 ? 0.1 : 0.9 }
         end
       end
 
@@ -121,7 +121,7 @@ module BipolarCache
           opts[:rescue]
         else # default
           lambda { |e|
-            e.inspect
+            warn "[BipolarCache] #{e.class}: #{e.message}"
             0
           }
         end

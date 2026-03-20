@@ -8,8 +8,8 @@ Gem::Specification.new do |spec|
   spec.authors = ["Andriy Tyurnikov"]
   spec.email = ["Andriy.Tyurnikov@gmail.com"]
 
-  spec.summary = "BipolarCache. Probabalistic caching toolkit."
-  spec.description = "Probabalistic caching toolkit useful for caching of database counters, and other operations."
+  spec.summary = "BipolarCache. Probabilistic caching toolkit."
+  spec.description = "Probabilistic caching toolkit useful for caching of database counters, and other operations."
   spec.homepage = "https://github.com/rubakas/bipolar_cache"
   spec.required_ruby_version = ">= 3.0.0"
 

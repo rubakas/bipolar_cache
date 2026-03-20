@@ -9,6 +9,10 @@ Metrics/AbcSize:
 Metrics/MethodLength:
   Enabled: false
 
+Metrics/ClassLength:
+  Exclude:
+    - "test/**/*"
+
 Style/Documentation:
   Enabled: false
 
