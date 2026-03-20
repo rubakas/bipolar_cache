@@ -66,7 +66,7 @@ module BipolarCache
               chance: bcsp_proc_chance_from(**opts),
               rescue: bcsp_proc_rescue_from(**opts),
               if: bcsp_proc_if_from(**opts)
-            }
+            }.freeze
         end
 
         # stored procs
@@ -118,6 +118,7 @@ module BipolarCache
           opts[:chance]
         when Integer, Float
           raise ArgumentError, "chance must be >= 0, got #{opts[:chance]}" if opts[:chance].negative?
+          raise ArgumentError, "chance must be <= 100, got #{opts[:chance]}" if opts[:chance] > 100
 
           normalised_chance = if opts[:chance] > 1
                                 opts[:chance] / 100.0

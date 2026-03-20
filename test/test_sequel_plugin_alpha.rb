@@ -75,6 +75,30 @@ class NeverCacheModel
   bipolar_count_cache :items, chance: 0
 end
 
+class BrokenUpdateModel
+  include BipolarCache::Sequel::PluginAlpha
+
+  attr_accessor :items_count_cache
+
+  def initialize(count_cache: nil)
+    @items_count_cache = count_cache
+  end
+
+  def items_dataset
+    self
+  end
+
+  def count
+    99
+  end
+
+  def update(_attrs)
+    raise "db error"
+  end
+
+  bipolar_count_cache :items
+end
+
 class TestSequelPluginAlpha < Minitest::Test
   def test_defines_count_method
     model = FakeModel.new(count_cache: 10)
@@ -242,24 +266,25 @@ class TestSequelPluginAlpha < Minitest::Test
   # Rescue wrapping on increment/decrement
 
   def test_increment_uses_rescue_on_error
-    model = FakeModel.new(count_cache: 10)
-    # Build procs, then sabotage the update proc to raise
-    procs = model.send(:fetch_or_build_procs, name: :comments)
-    procs[:update] = ->(_v) { raise "db error" }
+    model = BrokenUpdateModel.new(count_cache: 10)
     assert_output(nil, /BipolarCache.*db error/) do
-      result = model.comments_count_increment!
+      result = model.items_count_increment!
       assert_equal 0, result
     end
   end
 
   def test_decrement_uses_rescue_on_error
-    model = FakeModel.new(count_cache: 10)
-    procs = model.send(:fetch_or_build_procs, name: :comments)
-    procs[:update] = ->(_v) { raise "db error" }
+    model = BrokenUpdateModel.new(count_cache: 10)
     assert_output(nil, /BipolarCache.*db error/) do
-      result = model.comments_count_decrement!
+      result = model.items_count_decrement!
       assert_equal 0, result
     end
+  end
+
+  def test_frozen_procs_cannot_be_mutated
+    model = FakeModel.new(count_cache: 10)
+    procs = model.send(:fetch_or_build_procs, name: :comments)
+    assert_raises(FrozenError) { procs[:update] = -> {} }
   end
 
   # Negative chance validation
@@ -276,6 +301,26 @@ class TestSequelPluginAlpha < Minitest::Test
     assert_raises(ArgumentError) do
       model.send(:bcsp_proc_chance_from, chance: -0.5)
     end
+  end
+
+  def test_chance_over_100_raises_argument_error
+    model = FakeModel.new(count_cache: 10)
+    assert_raises(ArgumentError) do
+      model.send(:bcsp_proc_chance_from, chance: 150)
+    end
+  end
+
+  def test_chance_101_raises_argument_error
+    model = FakeModel.new(count_cache: 10)
+    assert_raises(ArgumentError) do
+      model.send(:bcsp_proc_chance_from, chance: 101)
+    end
+  end
+
+  def test_chance_100_is_valid
+    model = FakeModel.new(count_cache: 10)
+    chance_proc = model.send(:bcsp_proc_chance_from, chance: 100)
+    assert_equal 1.0, chance_proc.call(10)
   end
 
   # Return value tests for increment/decrement

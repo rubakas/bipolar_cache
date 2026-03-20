@@ -24,8 +24,17 @@ class TestBipolarCache < Minitest::Test
   end
 
   def test_it_hits_cache_when_chance_is_one
-    procs = @example_procs.merge({ chance: ->(_v) { 1 } })
-    assert_equal 0, @bipolar_cache.read!(**procs)
+    actual_called = false
+    procs = @example_procs.merge({
+                                   chance: ->(_v) { 1 },
+                                   actual: lambda {
+                                     actual_called = true
+                                     @value
+                                   }
+                                 })
+    result = @bipolar_cache.read!(**procs)
+    assert_equal 0, result
+    refute actual_called, "actual should not be called on cache hit"
   end
 
   def test_it_misses_and_updates_cache_when_chance_is_zero
