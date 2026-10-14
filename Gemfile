@@ -7,6 +7,9 @@ gemspec
 
 gem "rake", "~> 13.0"
 
-gem "minitest", "~> 6.0"
+# minitest 6 needs Ruby >= 3.2; older Rubies resolve to the 5.x series
+gem "minitest", ">= 5.16"
 
 gem "rubocop", "~> 1.70"
+
+gem "sequel", "~> 5.0"

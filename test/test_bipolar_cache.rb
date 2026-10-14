@@ -124,4 +124,92 @@ class TestBipolarCache < Minitest::Test
     }
     assert_raises(RuntimeError) { @bipolar_cache.read!(**procs) }
   end
+
+  def test_missing_required_keyword_raises_argument_error_even_with_rescue
+    procs = {
+      cached: -> { @cache },
+      chance: ->(_v) { 1 },
+      if: -> { true },
+      update: ->(_v) {},
+      rescue: ->(_e) { :swallowed }
+    }
+    assert_raises(ArgumentError) { @bipolar_cache.read!(**procs) }
+  end
+
+  def test_if_defaults_to_true_when_omitted
+    procs = {
+      actual: -> { @value },
+      cached: -> { @cache },
+      chance: ->(_v) { 1 },
+      update: ->(v) { @cache = v }
+    }
+    assert_equal 0, @bipolar_cache.read!(**procs)
+  end
+
+  def test_rescue_accepts_callable_object
+    callable_rescue = Object.new
+    def callable_rescue.call(error)
+      "handled: #{error.message}"
+    end
+
+    procs = @example_procs.merge(
+      chance: ->(_v) { 0 },
+      actual: -> { raise "boom" },
+      rescue: callable_rescue
+    )
+    assert_equal "handled: boom", @bipolar_cache.read!(**procs)
+  end
+
+  # Unknown keywords
+
+  def test_unknown_keyword_raises_argument_error_even_with_rescue
+    # a typo such as `chnace:` must not be silently ignored
+    assert_raises(ArgumentError) do
+      @bipolar_cache.read!(**@example_procs, chnace: ->(_v) { 0 })
+    end
+  end
+
+  # Cache write failure after a successful actual read
+
+  def test_failed_cache_update_still_returns_actual_value
+    procs = @example_procs.merge(
+      chance: ->(_v) { 0 },
+      update: ->(_v) { raise "cache write failed" }
+    )
+    assert_equal 42, @bipolar_cache.read!(**procs)
+  end
+
+  # Boundary of the `chance > rand` comparison (rand pinned for determinism)
+
+  def test_cache_hit_when_chance_is_above_rand
+    with_rand(0.5) do
+      procs = @example_procs.merge(chance: ->(_v) { 0.6 })
+      assert_equal 0, @bipolar_cache.read!(**procs)
+      assert_equal 0, @cache
+    end
+  end
+
+  def test_cache_miss_when_chance_is_below_rand
+    with_rand(0.5) do
+      procs = @example_procs.merge(chance: ->(_v) { 0.4 })
+      assert_equal 42, @bipolar_cache.read!(**procs)
+      assert_equal 42, @cache
+    end
+  end
+
+  def test_cache_miss_when_chance_equals_rand
+    with_rand(0.5) do
+      procs = @example_procs.merge(chance: ->(_v) { 0.5 })
+      assert_equal 42, @bipolar_cache.read!(**procs)
+    end
+  end
+
+  private
+
+  def with_rand(value)
+    @bipolar_cache.define_singleton_method(:rand) { value }
+    yield
+  ensure
+    @bipolar_cache.singleton_class.remove_method(:rand)
+  end
 end
