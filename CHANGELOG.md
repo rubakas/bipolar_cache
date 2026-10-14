@@ -1,30 +1,33 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 - 2026-10-14
 
-### Changed
+### Breaking changes
 
 - `BipolarCache.read!` raises `ArgumentError` for missing, unknown or non-callable
   keywords. Before, a missing `actual:` surfaced as a `NoMethodError` that `rescue:` swallowed,
   and misspelled keywords were silently ignored.
-- `BipolarCache.read!`: `if:` is optional (default: caching enabled) and every
-  callable may be any object responding to `call`, not only a `Proc`.
 - `BipolarCache.read!`: when only the cache write fails, the error goes to `rescue:` (or is
   re-raised without one) but the value that was read is still returned instead of the `rescue:` result.
 - Sequel plugin: procs passed to `bipolar_count_cache` run in the scope of the model instance
   (`self` used to be the class), so they can call instance methods and associations directly.
-- Sequel plugin: `if:`, `chance:` and `rescue:` accept a Symbol/String naming an instance method,
-  like `actual:`, `cached:` and `update:` already did. `if: :method` used to be ignored,
-  which left caching switched on.
-- Sequel plugin: invalid options (wrong type, `chance` below 0, above 100 or `NaN`) raise
-  `ArgumentError` when `bipolar_count_cache` is declared instead of on first use.
 - Sequel plugin: for `Sequel::Model` instances the default cache write is a bare dataset `UPDATE`
   of the cache column. It no longer runs validations and hooks, saves other unsaved columns or
   inserts an unsaved record. `increment!`/`decrement!` use `coalesce(col, 0) + n` in SQL, so
   concurrent increments are not lost and a `NULL` column is handled. Your own `update:` is
   still called with the new value.
+- Sequel plugin: invalid options (wrong type, `chance` below 0, above 100 or `NaN`) raise
+  `ArgumentError` when `bipolar_count_cache` is declared instead of on first use.
 - Sequel plugin: the `bcsp_*` helper methods are private. `fetch_or_build_procs` is gone: procs are
   built per call instead of being memoized on the instance.
+
+### Changed
+
+- `BipolarCache.read!`: `if:` is optional (default: caching enabled) and every
+  callable may be any object responding to `call`, not only a `Proc`.
+- Sequel plugin: `if:`, `chance:` and `rescue:` accept a Symbol/String naming an instance method,
+  like `actual:`, `cached:` and `update:` already did. `if: :method` used to be ignored,
+  which left caching switched on.
 
 ### Fixed
 
@@ -44,5 +47,6 @@
 ### Added
 
 - Type signatures in `sig/bipolar_cache.rbs`.
-- Tests against real `Sequel::Model` instances (Sequel's mock adapter); `sequel` is a development dependency.
+- Tests against real `Sequel::Model` instances, both with Sequel's mock adapter and with an
+  in-memory SQLite database; `sequel` and `sqlite3` are development dependencies.
 - Ruby 4.0 in the CI matrix.
