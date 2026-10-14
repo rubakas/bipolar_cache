@@ -47,7 +47,7 @@ $ gem install bipolar_cache
 
 ### Core API
 
-`BipolarCache.read!` accepts six keyword arguments, all callables (procs/lambdas):
+`BipolarCache.read!` accepts six keyword arguments, all callables (procs, lambdas, or anything that responds to `call`):
 
 ```ruby
 result = BipolarCache.read!(
@@ -65,9 +65,18 @@ result = BipolarCache.read!(
 | `actual`  | yes | Callable that returns the real value (e.g., a database query) |
 | `cached`  | yes | Callable that returns the cached value |
 | `chance`  | yes | Callable that receives the cached value and returns a float 0.0-1.0. Higher = more likely to use cache. |
-| `if`      | yes | Callable that returns true/false. When false, always returns the actual value. |
+| `if`      | no  | Callable that returns true/false. When false, always returns the actual value. Defaults to always enabled. |
 | `update`  | yes | Callable that receives the actual value and persists it to the cache |
 | `rescue`  | no  | Callable that receives a `StandardError`. Without it, errors re-raise. |
+
+Missing, unknown (e.g. a misspelled `chnace:`) or non-callable arguments raise `ArgumentError`, even when `rescue` is given.
+
+#### Errors
+
+- An error while reading (`if`, `cached`, `chance` or `actual`) goes to `rescue`, and its return value becomes the result.
+- An error while writing the cache (`update`) is also passed to `rescue`, but the result is still the actual value
+  that was just read. A failed cache write never replaces a good answer.
+- Without `rescue`, both kinds of error are re-raised.
 
 ### Sequel Plugin (alpha)
 
@@ -91,8 +100,8 @@ This generates four instance methods:
 ```ruby
 user.comments_count            # probabilistic: returns cached or actual count
 user.comments_count_refresh!   # force: computes actual and updates cache
-user.comments_count_increment! # bump cache by 1 (or by: n)
-user.comments_count_decrement! # drop cache by 1 (or by: n)
+user.comments_count_increment! # bump cache by 1 (or by: n), returns the new value
+user.comments_count_decrement! # drop cache by 1 (or by: n), returns the new value
 ```
 
 #### Options
@@ -103,10 +112,33 @@ bipolar_count_cache :comments,
   chance: 75,                        # fixed probability as percentage (default: adaptive)
   actual: -> { comments_dataset.where(visible: true).count },  # custom actual proc
   cached: :my_cache_column,          # custom cache column/method name
-  update: ->(v) { set(my_col: v) },  # custom update proc
+  update: ->(v) { update(my_cache_column: v) },  # custom update proc
   rescue: ->(e) { log(e); nil },     # custom error handler
   if: -> { !new? }                   # disable caching for unsaved records
 ```
+
+Procs run in the scope of the model instance, so they can call its methods and associations directly.
+`actual`, `cached`, `update`, `if`, `chance` and `rescue` also accept a Symbol (or String) naming an
+instance method, which receives the same arguments the proc would:
+
+```ruby
+bipolar_count_cache :comments, if: :caching_enabled?, chance: :hit_chance, rescue: :report_error
+```
+
+Options are checked when `bipolar_count_cache` is declared: a value of the wrong type, or a numeric `chance`
+outside 0-100 (or `NaN`), raises `ArgumentError` at class-load time. A method name that the model doesn't
+respond to raises `ArgumentError` the first time the cache is used.
+
+#### How the cache is written
+
+For a `Sequel::Model` the default write is a plain `UPDATE` of the cache column. It does not run validations or
+hooks, does not save other unsaved changes on the record, and does nothing in the database for a record that
+isn't saved yet (the new value only lives in memory). `increment!` and `decrement!` are done in SQL
+(`cache = coalesce(cache, 0) + n`), so concurrent bumps don't overwrite each other and a `NULL` column counts as 0.
+
+Passing your own `update:` replaces all of this: it is called with the new value, whatever it does.
+
+By default errors are logged with `warn` and the method returns `0`; pass `rescue:` to change that.
 
 #### Chance values
 

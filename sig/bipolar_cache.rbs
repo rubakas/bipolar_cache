@@ -1,4 +1,50 @@
 module BipolarCache
   VERSION: String
-  # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+
+  class Error < StandardError
+  end
+
+  interface _Call
+    def call: () -> untyped
+  end
+
+  interface _CallWithValue
+    def call: (untyped value) -> untyped
+  end
+
+  interface _CallWithError
+    def call: (StandardError error) -> untyped
+  end
+
+  def self.read!: (
+    actual: _Call,
+    cached: _Call,
+    chance: _CallWithValue,
+    update: _CallWithValue,
+    ?if: _Call?,
+    ?rescue: _CallWithError?
+  ) -> untyped
+
+  module Sequel
+    module PluginAlpha
+      # A Proc runs in the scope of the model instance; a Symbol or String
+      # names an instance method that receives the call arguments.
+      type callable = Proc | Symbol | String
+
+      def self.included: (Module base) -> void
+
+      module ClassMethods
+        def bipolar_count_cache: (
+          Symbol | String name,
+          ?method: Symbol | String,
+          ?actual: callable?,
+          ?cached: callable?,
+          ?update: callable?,
+          ?chance: callable | Integer | Float | nil,
+          ?if: callable | bool | nil,
+          ?rescue: callable?
+        ) -> void
+      end
+    end
+  end
 end
