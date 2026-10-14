@@ -232,10 +232,20 @@ class TestSequelPluginAlpha < Minitest::Test
     assert_equal 0.9, chance_proc.call(100)
   end
 
-  def test_default_chance_handles_nil_value
+  def test_default_chance_never_hits_a_missing_cache
     model = FakeModel.new(count_cache: nil)
     chance_proc = model.send(:bcsp_proc_chance_from, name: :comments)
-    assert_equal 0.1, chance_proc.call(nil)
+    assert_equal 0, chance_proc.call(nil)
+  end
+
+  def test_count_with_missing_cache_returns_actual_and_populates_it
+    model = FakeModel.new(count_cache: nil)
+    BipolarCache.define_singleton_method(:rand) { 0.0 }
+
+    assert_equal 42, model.comments_count
+    assert_equal 42, model.comments_count_cache
+  ensure
+    BipolarCache.singleton_class.remove_method(:rand)
   end
 
   def test_update_with_symbol_passes_value
@@ -273,11 +283,16 @@ class TestSequelPluginAlpha < Minitest::Test
     assert_equal "caught: boom", rescue_proc.call(RuntimeError.new("boom"))
   end
 
-  def test_procs_are_cached_per_instance
-    model = FakeModel.new(count_cache: 10)
-    procs1 = model.send(:fetch_or_build_procs, name: :comments)
-    procs2 = model.send(:fetch_or_build_procs, name: :comments)
-    assert_same procs1, procs2
+  # Procs are bound to the instance; keeping them in an ivar breaks Marshal.
+  def test_reading_a_count_leaves_no_state_on_the_instance
+    model = AlwaysCacheModel.new(count_cache: 10)
+    ivars = model.instance_variables
+
+    model.items_count
+    model.items_count_increment!
+    model.items_count_refresh!
+
+    assert_equal ivars, model.instance_variables
   end
 
   # Integration tests: full read path through BipolarCache.read!
@@ -321,7 +336,7 @@ class TestSequelPluginAlpha < Minitest::Test
 
   def test_frozen_procs_cannot_be_mutated
     model = FakeModel.new(count_cache: 10)
-    procs = model.send(:fetch_or_build_procs, name: :comments)
+    procs = model.send(:bcsp_build_procs, name: :comments)
     assert_raises(FrozenError) { procs[:update] = -> {} }
   end
 
@@ -413,7 +428,7 @@ class TestSequelPluginAlpha < Minitest::Test
 
   def test_dup_instance_does_not_read_or_update_original_instance
     model1 = NeverCacheModel.new(count_cache: 10)
-    model1.items_count # initializes @bcsp_proc_store on model1
+    model1.items_count
 
     model2 = model1.dup
     model2.items_count_cache = 20
@@ -493,7 +508,7 @@ class TestSequelPluginAlpha < Minitest::Test
   def test_internal_helper_methods_are_private
     model = FakeModel.new(count_cache: 10)
     refute_respond_to model, :bcsp_cache
-    refute_respond_to model, :fetch_or_build_procs
+    refute_respond_to model, :bcsp_build_procs
     refute_respond_to model, :bcsp_proc_actual_from
     refute_respond_to model, :bcsp_proc_cached_from
     refute_respond_to model, :bcsp_proc_update_from

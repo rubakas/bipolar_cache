@@ -23,7 +23,8 @@
   inserts an unsaved record. `increment!`/`decrement!` use `coalesce(col, 0) + n` in SQL, so
   concurrent increments are not lost and a `NULL` column is handled. Your own `update:` is
   still called with the new value.
-- Sequel plugin: the `bcsp_*` helper methods and `fetch_or_build_procs` are private.
+- Sequel plugin: the `bcsp_*` helper methods are private. `fetch_or_build_procs` is gone: procs are
+  built per call instead of being memoized on the instance.
 
 ### Fixed
 
@@ -33,6 +34,12 @@
 - Sequel plugin: reading a count on a frozen model no longer raises `FrozenError`.
 - Sequel plugin: `refresh!` goes through `rescue:` like `increment!`/`decrement!`, and those two
   no longer replace the original error with a `NoMethodError`.
+- Sequel plugin: a model whose count was read can be `Marshal.dump`ed again. The memoized procs
+  lived in an instance variable and made `Marshal.dump` raise `TypeError`.
+- Sequel plugin: with the default `chance`, a `NULL` cache column is a miss. It used to be a hit 10% of
+  the time and `comments_count` returned `nil`.
+- Sequel plugin: the default cache write clears the cache column from `changed_columns`, so a later
+  `save`/`save_changes` no longer writes a stale value over a newer one.
 
 ### Added
 

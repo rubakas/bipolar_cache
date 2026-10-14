@@ -13,3 +13,6 @@ gem "minitest", ">= 5.16"
 gem "rubocop", "~> 1.70"
 
 gem "sequel", "~> 5.0"
+
+# Allow the 1.x series for the Ruby 3.0 CI job.
+gem "sqlite3", ">= 1.7", "< 3"

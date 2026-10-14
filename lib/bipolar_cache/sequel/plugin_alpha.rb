@@ -14,11 +14,11 @@ module BipolarCache
           method_name = opts[:method] || "#{name}_count"
 
           define_method method_name do
-            bcsp_cache(**fetch_or_build_procs(**opts))
+            bcsp_cache(**bcsp_build_procs(**opts))
           end
 
           define_method "#{method_name}_refresh!" do
-            procs = fetch_or_build_procs(**opts)
+            procs = bcsp_build_procs(**opts)
 
             bcsp_guarded(procs) do
               actual_value = procs[:actual].call
@@ -123,7 +123,11 @@ module BipolarCache
         def bcsp_proc_chance_from(**opts)
           case opts[:chance]
           when nil # default
-            ->(value) { (value || 0) < 10 ? 0.1 : 0.9 }
+            lambda { |value|
+              next 0 if value.nil? # a missing cache is never a hit: it would hand back nil
+
+              value < 10 ? 0.1 : 0.9
+            }
           when Integer, Float
             probability = Options.chance_probability(opts[:chance])
             ->(_value) { probability }
@@ -167,12 +171,6 @@ module BipolarCache
         base.extend ClassMethods
       end
 
-      # Copies must not share procs that are bound to the original.
-      def initialize_copy(other)
-        super
-        remove_instance_variable(:@bcsp_proc_store) if instance_variable_defined?(:@bcsp_proc_store)
-      end
-
       private
 
       def bcsp_cache(**procs)
@@ -186,7 +184,7 @@ module BipolarCache
       end
 
       def bcsp_adjust_cache!(opts, delta)
-        procs = fetch_or_build_procs(**opts)
+        procs = bcsp_build_procs(**opts)
 
         bcsp_guarded(procs) do
           new_value = (procs[:cached].call || 0) + delta
@@ -203,15 +201,6 @@ module BipolarCache
         end
       end
 
-      def fetch_or_build_procs(**opts)
-        # a frozen instance has nowhere to keep the store, so it rebuilds
-        return bcsp_build_procs(**opts) if frozen?
-
-        key = (opts[:method] || "#{opts[:name]}_count").to_s
-        @bcsp_proc_store ||= {}
-        @bcsp_proc_store[key] ||= bcsp_build_procs(**opts)
-      end
-
       def bcsp_sequel_model?
         defined?(::Sequel::Model) && is_a?(::Sequel::Model)
       end
@@ -224,7 +213,11 @@ module BipolarCache
         return update({ column => value }) unless bcsp_sequel_model?
 
         this.update(column => expression) unless new?
-        values[column] = value unless frozen?
+        return if frozen?
+
+        values[column] = value
+        # the value is now in the database; a later save must not write it again
+        changed_columns.delete(column)
       end
     end
   end
